@@ -121,6 +121,31 @@ jobs:
           python3 ../configure.py ${{ inputs.debug && '--enable-debug' || '--enable-optimize' }}
           ambuild
 
+      - name: Verify Linux ABI baseline
+        if: startsWith(runner.os, 'Linux')
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t binaries < <(find build/package -type f -name '*.so' -print)
+          if [ "${#binaries[@]}" -eq 0 ]; then
+            echo "::error::No shared libraries found in build/package"
+            exit 1
+          fi
+
+          for spec in 'GLIBC 2.31' 'GLIBCXX 3.4.28' 'CXXABI 1.3.12'; do
+            read -r family maximum <<< "$spec"
+            highest="$(readelf --version-info "${binaries[@]}" | grep -oE "${family}_[0-9.]+" | sort -Vu | tail -n1 || true)"
+            if [ -z "$highest" ]; then
+              continue
+            fi
+            highest_version="${highest#${family}_}"
+            if [ "$(printf '%s\n' "$highest_version" "$maximum" | sort -V | tail -n1)" != "$maximum" ]; then
+              echo "::error::Linux package requires ${highest}; Debian 11 universal baseline supports at most ${family}_${maximum}"
+              exit 1
+            fi
+            echo "${family} requirement ${highest} is within Debian 11 baseline ${family}_${maximum}"
+          done
+
       - name: Upload package
         if: ${{ inputs.upload }}
         uses: actions/upload-artifact@v7

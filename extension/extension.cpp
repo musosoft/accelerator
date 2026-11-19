@@ -418,6 +418,11 @@ class UploadThread: public IThread
 		}
 
 		IDirectory *dumps = libsys->OpenDirectory(dumpStoragePath);
+		if (!dumps) {
+			if (log) fclose(log);
+			g_accelerator.MarkAsDoneUploading();
+			return;
+		}
 
 		int skip = 0;
 		int count = 0;
